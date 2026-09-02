@@ -1,5 +1,4 @@
 #include <atomic>
-#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <unistd.h>
@@ -11,14 +10,6 @@
 namespace {
     std::atomic<bool> g_running { true };
     void handleSignal(int /*sig*/) { g_running = false; }
-
-    uint32_t custom_tick_get(void) {
-        static const auto start = std::chrono::steady_clock::now();
-        const auto now = std::chrono::steady_clock::now();
-        return static_cast<uint32_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count()
-        );
-    }
 
     lv_display_t *initNative(const std::string &drmDevice,
                              const std::string &touchDevice,
@@ -55,7 +46,6 @@ static constexpr lv_display_rotation_t DISPLAY_ROTATION = LV_DISPLAY_ROTATION_27
 int main()
 {
     lv_init();
-    lv_tick_set_cb(custom_tick_get);
 
     // --- HAL: display + input ---
     std::string drmDevice = "/dev/dri/card0";
@@ -70,7 +60,7 @@ int main()
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
 
-    // --- Sample UI ---
+    // --- Sample UI (ensures the display shows active content) ---
     lv_obj_t* label = lv_label_create(lv_screen_active());
     lv_label_set_text(label, "Airgap Update Demo\nWaiting for USB...");
     lv_obj_center(label);
@@ -93,7 +83,5 @@ int main()
         usleep(sleepMs * 1000);
     }
 
-    std::cout << "Cleaning up and exiting...\n";
-    lv_deinit();
     return 0;
 }
