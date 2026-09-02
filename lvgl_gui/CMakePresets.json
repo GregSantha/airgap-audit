@@ -1,0 +1,46 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "arm64-debug",
+      "inherits": "default",
+      "displayName": "ARM64 Debug",
+      "description": "Cross-compile debug build for Raspberry Pi",
+      "toolchainFile": "${sourceDir}/cmake/arm64-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "arm64-release",
+      "inherits": "default",
+      "displayName": "ARM64 Release",
+      "description": "Cross-compile release build for ARMv8 (optimized)",
+      "toolchainFile": "${sourceDir}/cmake/arm64-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "arm64-debug",
+      "configurePreset": "arm64-debug",
+      "jobs": 4
+    },
+    {
+      "name": "arm64-release",
+      "configurePreset": "arm64-release",
+      "jobs": 4
+    }
+  ]
+}

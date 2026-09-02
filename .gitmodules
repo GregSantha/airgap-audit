@@ -1,0 +1,5 @@
+[submodule "lvgl_gui/external/lvgl"]
+	path = lvgl_gui/external/lvgl
+	url = git@github.com:GregSantha/lvgl.git
+	shallow = true
+	branch = release/9.5.0/patch
