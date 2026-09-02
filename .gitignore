@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Type checking & linting
+.mypy_cache/
+.ruff_cache/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cryptographic Keys & Update Containers
+*.pem
+*.key
+*.fwup
+!tests/fixtures/*.key
+!tests/fixtures/*.pem
+
+# C++ Build Artifacts (ignore compiled objects and caches in lvgl_gui)
+lvgl_gui/build/
