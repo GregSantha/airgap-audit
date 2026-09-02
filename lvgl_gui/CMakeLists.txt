@@ -27,7 +27,7 @@ target_include_directories(lvgl PUBLIC ${DRM_INCLUDE_DIRS} ${INPUT_INCLUDE_DIRS}
 add_executable(lvgl_gui main.cpp)
 target_include_directories(lvgl_gui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ../external
+    external
 )
 
 target_link_libraries(lvgl_gui PRIVATE ${DRM_LIBRARIES} ${INPUT_LIBRARIES})

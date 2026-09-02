@@ -1251,11 +1251,8 @@
  *==================*/
 
 /** Use SDL to open window on PC and handle mouse and keyboard. */
-#if defined(APP_USE_NATIVE_DRIVERS)
-    #define LV_USE_SDL              0
-#else
-    #define LV_USE_SDL              1
-#endif
+#define LV_USE_SDL              0
+
 #if LV_USE_SDL
     #define LV_SDL_INCLUDE_PATH     <SDL2/SDL.h>
     #define LV_SDL_RENDER_MODE      LV_DISPLAY_RENDER_MODE_DIRECT   /**< LV_DISPLAY_RENDER_MODE_DIRECT is recommended for best performance */
@@ -1335,11 +1332,7 @@
 #endif
 
 /** Driver for /dev/dri/card */
-#if defined(APP_USE_NATIVE_DRIVERS)
-    #define LV_USE_LINUX_DRM        1
-#else
-    #define LV_USE_LINUX_DRM        0
-#endif
+#define LV_USE_LINUX_DRM        1
 
 #if LV_USE_LINUX_DRM
 
@@ -1365,11 +1358,7 @@
 #define LV_USE_EVDEV    0
 
 /** Driver for libinput input devices */
-#if defined(APP_USE_NATIVE_DRIVERS)
-    #define LV_USE_LIBINPUT    1
-#else
-    #define LV_USE_LIBINPUT    0
-#endif
+#define LV_USE_LIBINPUT    1
 
 #if LV_USE_LIBINPUT
     #define LV_LIBINPUT_BSD    0

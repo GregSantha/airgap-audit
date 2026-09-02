@@ -17,8 +17,7 @@
       "description": "Cross-compile debug build for Raspberry Pi",
       "toolchainFile": "${sourceDir}/cmake/arm64-toolchain.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "RPI_TARGET": "ON"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -28,8 +27,7 @@
       "description": "Cross-compile release build for ARMv8 (optimized)",
       "toolchainFile": "${sourceDir}/cmake/arm64-toolchain.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "RPI_TARGET": "ON"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ],

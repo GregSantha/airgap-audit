@@ -65,7 +65,7 @@ int main()
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
 
-    logger.log(LogLevel::INFO, "Application initialized, entering main event loop");
+    std::cout << "Application initialized, entering main event loop\n";
 
     // --- Main Event Loop ---
     while (g_running)
