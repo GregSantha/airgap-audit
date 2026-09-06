@@ -1,0 +1,27 @@
+[Unit]
+Description=LVGL GUI Application with Offline USB Updater
+After=basic.target
+
+[Service]
+Type=simple
+User=dietpi
+WorkingDirectory=/home/dietpi
+
+# Target binary path variable
+Environment="TARGET_BIN=/home/dietpi/lvgl_gui"
+
+# 1. Run USB companion updater:
+#    - '+' runs with root privileges (needed for transient read-only mount of /dev/sda1)
+#    - '-' ensures that if no USB is present or an error occurs, systemd still launches existing binary
+ExecStartPre=+-/usr/bin/python3 -m airgap_audit.companion.updater
+
+# 2. Ensure execution bit is set
+ExecStartPre=+/bin/chmod +x $TARGET_BIN
+
+# 3. Launch application
+ExecStart=$TARGET_BIN
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=basic.target

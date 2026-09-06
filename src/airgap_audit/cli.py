@@ -22,29 +22,19 @@ def version() -> None:
 
 
 @app.command()
-def update_check(
-    usb_mount: str = typer.Option("/media/usb", help="Path to mounted USB pendrive"),
-    target: str = typer.Option("/usr/local/bin/lvgl_gui", help="Path to destination executable"),
-    pubkey: str = typer.Option("/etc/airgap-audit/pubkey.pem", help="Path to trusted public key"),
-) -> None:
+def update_check() -> None:
     """Run the companion updater agent to inspect and apply pending updates."""
-    from pathlib import Path
-
-    from airgap_audit.companion.updater import run_update
+    from airgap_audit.companion.updater import run
 
     try:
-        updated = run_update(
-            usb_mount=Path(usb_mount),
-            target_binary=Path(target),
-            pubkey_path=Path(pubkey),
-        )
+        updated = run()
         if updated:
             console.print("[bold green][PASS][/bold green] Update applied successfully.")
         else:
-            console.print("[dim]No update bundle detected on USB drive.[/dim]")
-    except NotImplementedError as exc:
-        console.print(f"[bold yellow][STUB][/bold yellow] {exc}")
-        sys.exit(0)
+            console.print("[dim]No update candidate or changes detected on USB drive.[/dim]")
+    except (OSError, RuntimeError) as exc:
+        console.print(f"[bold red][ERROR][/bold red] {exc}")
+        sys.exit(1)
 
 
 def main() -> None:
