@@ -1,0 +1,24 @@
+[Unit]
+Description=LVGL GUI Application with Offline USB Updater
+After=basic.target
+
+[Service]
+Type=simple
+User=dietpi
+WorkingDirectory=/home/dietpi
+
+# 1. Run USB companion updater
+#    '+' runs as root to allow mounting /dev/sda1
+#    '-' ensures systemd still launches existing binary if no USB is attached
+ExecStartPre=+-/usr/bin/python3 -m airgap_audit.companion.updater
+
+# 2. Ensure executable permissions
+ExecStartPre=+/bin/chmod +x /home/dietpi/lvgl_gui
+
+# 3. Launch application
+ExecStart=/home/dietpi/lvgl_gui
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=basic.target

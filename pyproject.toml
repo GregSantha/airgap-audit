@@ -30,6 +30,7 @@ dev = [
 
 [project.scripts]
 airgap-audit = "airgap_audit.cli:main"
+airgap-updater = "airgap_audit.companion.updater:main"
 
 [tool.ruff]
 line-length = 100

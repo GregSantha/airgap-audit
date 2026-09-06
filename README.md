@@ -8,7 +8,7 @@ Built for air-gapped embedded systems (e.g. DietPi on ARMv8) where the applicati
 
 ## Development Setup with `uv`
 
-This project uses [`uv`](https://github.com/astral-sh/uv) for dependency resolution, virtual environments, and tool execution.
+This project uses [`uv`](https://github.com/astral-sh/uv) for dependency resolution, virtual environments, packaging, and tool execution.
 
 ### 1. Install Dependencies
 ```bash
@@ -38,6 +38,27 @@ uv run airgap-audit version
 uv run airgap-audit update-check
 ```
 
+### 5. Build Distribution Wheel
+```bash
+uv build
+```
+This produces both a source distribution (`.tar.gz`) and a standalone wheel (`.whl`) in `dist/`:
+- `dist/airgap_audit-0.1.0-py3-none-any.whl`
+
+---
+
+## Target Deployment (DietPi / Embedded)
+
+To deploy the companion updater package onto the target device:
+
+```bash
+# 1. Transfer the wheel to the board:
+scp dist/airgap_audit-0.1.0-py3-none-any.whl dietpi@<dietpi_ip>:/tmp/
+
+# 2. Install on DietPi:
+sudo pip install --break-system-packages /tmp/airgap_audit-0.1.0-py3-none-any.whl
+```
+
 ---
 
 ## Repository Structure
@@ -47,10 +68,11 @@ airgap-audit/
 ├── uv.lock                     # Pinned dependency lockfile
 ├── src/
 │   └── airgap_audit/
-│       ├── cli.py              # CLI entry point
+│       ├── cli.py              # CLI entry point (airgap-audit)
 │       └── companion/
-│           └── updater.py      # Companion update agent (e.g. systemd ExecStartPre)
+│           └── updater.py      # Companion update agent (ExecStartPre / airgap-updater)
 ├── lvgl_gui/                   # C++ application workspace & build environment
 └── tests/
-    └── test_smoke.py           # Verification tests
+    ├── test_smoke.py           # Verification tests
+    └── test_updater.py         # Hardware & partition logic tests (using real lsblk dumps)
 ```
