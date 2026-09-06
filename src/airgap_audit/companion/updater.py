@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("airgap_updater")
 
 # Defaults (can be overridden via environment variable TARGET_BIN)
-TARGET_BIN = Path(os.getenv("TARGET_BIN", "/home/dietpi/lvgl_gui"))
+TARGET_BIN = Path("/home/dietpi/lvgl_gui")
 STATE_FILE = TARGET_BIN.parent / f".{TARGET_BIN.name}_hash"
 TEMP_MOUNT = Path("/tmp/airgap_usb")
 SUPPORTED_FS = {"vfat", "fat", "exfat", "ext4"}
