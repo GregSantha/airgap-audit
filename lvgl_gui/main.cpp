@@ -49,7 +49,7 @@ int main()
 
     // --- HAL: display + input ---
     std::string drmDevice = "/dev/dri/card0";
-    std::string touchDevice = "/dev/input/touchscreen";
+    std::string touchDevice = "/dev/input/event0";
     lv_display_t* disp = initNative(drmDevice, touchDevice, DISPLAY_ROTATION);
 
     if (disp == nullptr) {
