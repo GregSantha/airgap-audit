@@ -14,6 +14,63 @@ from airgap_audit.companion.updater import (
     run,
 )
 
+# Real JSON dump captured from DietPi on ARMv8
+REAL_DIETPI_LSBLK_JSON = """{
+   "blockdevices": [
+      {
+         "name": "sda",
+         "path": "/dev/sda",
+         "tran": "usb",
+         "rm": true,
+         "fstype": null,
+         "mountpoints": [],
+         "mountpoint": null,
+         "children": [
+            {
+               "name": "sda1",
+               "path": "/dev/sda1",
+               "tran": null,
+               "rm": true,
+               "fstype": "vfat",
+               "mountpoints": [],
+               "mountpoint": null
+            }
+         ]
+      },{
+         "name": "mmcblk0",
+         "path": "/dev/mmcblk0",
+         "tran": "mmc",
+         "rm": false,
+         "fstype": null,
+         "mountpoints": [],
+         "mountpoint": null,
+         "children": [
+            {
+               "name": "mmcblk0p1",
+               "path": "/dev/mmcblk0p1",
+               "tran": "mmc",
+               "rm": false,
+               "fstype": "vfat",
+               "mountpoints": [
+                   "/boot/firmware"
+               ],
+               "mountpoint": "/boot/firmware"
+            },{
+               "name": "mmcblk0p2",
+               "path": "/dev/mmcblk0p2",
+               "tran": "mmc",
+               "rm": false,
+               "fstype": "ext4",
+               "mountpoints": [
+                   "/"
+               ],
+               "mountpoint": "/"
+            }
+         ]
+      }
+   ]
+}"""
+
 
 def test_get_file_sha256(tmp_path: Path) -> None:
     sample = tmp_path / "app.bin"
@@ -22,47 +79,15 @@ def test_get_file_sha256(tmp_path: Path) -> None:
     assert get_file_sha256(sample) == expected
 
 
-def test_find_usb_partitions_filtering(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_data = {
-        "blockdevices": [
-            {
-                "name": "sda",
-                "tran": "usb",
-                "rm": True,
-                "children": [
-                    {
-                        "name": "sda1",
-                        "path": "/dev/sda1",
-                        "fstype": "vfat",
-                        "mountpoint": None,
-                    }
-                ],
-            },
-            {
-                "name": "mmcblk0",
-                "tran": "mmc",
-                "rm": False,
-                "children": [
-                    {
-                        "name": "mmcblk0p1",
-                        "fstype": "vfat",
-                        "mountpoint": "/boot/firmware",
-                    },
-                    {
-                        "name": "mmcblk0p2",
-                        "fstype": "ext4",
-                        "mountpoint": "/",
-                    },
-                ],
-            },
-        ]
-    }
-
+def test_find_usb_partitions_real_dietpi_hardware(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify partition discovery against the exact lsblk JSON from the physical DietPi device."""
     def mock_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout=json.dumps(mock_data))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=REAL_DIETPI_LSBLK_JSON)
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     partitions = find_usb_partitions()
+
+    # Must accurately find /dev/sda1 and ignore internal SD card mmcblk0p1 & mmcblk0p2
     assert len(partitions) == 1
     assert partitions[0]["device"] == "/dev/sda1"
     assert partitions[0]["mount"] is None
