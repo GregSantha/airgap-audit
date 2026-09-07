@@ -12,10 +12,10 @@ permissions:
   contents: write
 
 jobs:
-  ci-lint:
-    name: Linting & Formatting
+  ci-python:
+    name: Python Lint, Typecheck, Test & Package
     runs-on: ubuntu-24.04
-    # Only run on manual trigger, or PRs containing the 'run-ci' label
+    # Run on manual trigger, tag pushes, or PRs labeled 'run-ci'
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-ci'))
@@ -25,14 +25,37 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
         with:
-          python-version: '3.13'
+          enable-cache: true
 
-      - name: Install Linting & Formatting Tools
-        run: |
-          # TODO
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Check Formatting (ruff format)
+        run: uv run ruff format --check src/ tests/
+
+      - name: Lint Code (ruff check)
+        run: uv run ruff check src/ tests/
+
+      - name: Static Type Checking (mypy)
+        run: uv run mypy src/ tests/
+
+      - name: Run Test Suite (pytest)
+        run: uv run pytest -v
+
+      - name: Build Distribution Packages (wheel & sdist)
+        run: uv build
+
+      - name: Upload Python Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python_dist
+          path: dist/*
 
   ci-build-arm64:
     name: Build ARM64 Binaries
@@ -47,12 +70,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install ARM64 Dependencies
+      - name: Install ARM64 Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libdrm-dev libinput-dev
+          sudo apt-get install -y build-essential cmake pkg-config libdrm-dev libinput-dev
 
       - name: Build ARM64 Binaries
+        working-directory: lvgl_gui
         run: |
           cmake --preset arm64-release
           cmake --build --preset arm64-release -j$(nproc)
@@ -62,12 +86,11 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: lvgl_gui_binary
-          path: |
-            build/arm64-release/src/lvgl_gui
+          path: lvgl_gui/build/arm64-release/lvgl_gui
 
   ci-release:
     name: Create GitHub Release
-    needs: [ci-build-x64, ci-build-arm64]
+    needs: [ci-python, ci-build-arm64]
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -77,16 +100,23 @@ jobs:
           name: lvgl_gui_binary
           path: ./arm64-dist
 
-      - name: Prepare Release Binaries
+      - name: Download Python Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python_dist
+          path: ./python-dist
+
+      - name: Prepare Release Assets
         run: |
           cp ./arm64-dist/lvgl_gui ./lvgl_gui
           chmod +x ./lvgl_gui
 
-      - name: Create GitHub Release and Upload Binaries
-        uses: softprops/action-gh-release@v3
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             lvgl_gui
+            ./python-dist/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
