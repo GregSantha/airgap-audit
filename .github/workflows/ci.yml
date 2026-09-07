@@ -130,6 +130,10 @@ jobs:
           chmod +x ./release-assets/lvgl_gui
           cp ./python-dist/* ./release-assets/
 
+      - name: Audit Binary Mitigations (pyelftools)
+        run: |
+          uv run airgap-audit audit elf ./release-assets/lvgl_gui --strict --min-score 85
+
       - name: Sign & Package Update Container (lvgl_gui.update)
         env:
           RELEASE_KEY: ${{ secrets.RELEASE_PRIVATE_KEY }}
@@ -144,10 +148,12 @@ jobs:
           chmod 600 /tmp/release_key.pem
 
           # Auto-detects version, epoch, and device_id from lvgl_gui/version.h
+          # and validates binary exploit mitigations before sealing container
           uv run airgap-audit package create \
             --payload ./release-assets/lvgl_gui \
             --key /tmp/release_key.pem \
-            --out ./release-assets/lvgl_gui.update
+            --out ./release-assets/lvgl_gui.update \
+            --audit
 
           rm -f /tmp/release_key.pem
 

@@ -18,6 +18,8 @@ set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "")
 set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "")
 set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "")
 
+set(ENABLE_SECURITY_HARDENING ON CACHE BOOL "")
+
 add_subdirectory(external/lvgl)
 
 # Ensure LVGL itself can find the DRM and libinput headers
@@ -38,3 +40,17 @@ target_include_directories(lvgl_gui PRIVATE
 target_compile_options(lvgl_gui PRIVATE
     -Wall -Wextra -Wpedantic
 )
+
+if(ENABLE_SECURITY_HARDENING)
+    target_compile_options(lvgl_gui PRIVATE
+        -fstack-protector-strong
+        -D_FORTIFY_SOURCE=3
+        -fPIE
+    )
+
+    target_link_options(lvgl_gui PRIVATE
+        -Wl,-z,relro,-z,now
+        -Wl,-z,noexecstack
+        -pie
+    )
+endif()

@@ -34,10 +34,18 @@ uv run ruff check src/ tests/
 # Print help
 uv run airgap-audit --help
 
-# Check version
-uv run airgap-audit version
+# Audit an ELF binary for exploit mitigations (NX, PIE, Canary, Full RELRO, Fortify, RPATH)
+uv run airgap-audit audit elf lvgl_gui/build/arm64-release/lvgl_gui
+uv run airgap-audit audit elf lvgl_gui/build/arm64-release/lvgl_gui --format json
+uv run airgap-audit audit elf lvgl_gui/build/arm64-release/lvgl_gui --strict --min-score 85
 
-# Run companion update check
+# Create a sealed .update container with pre-flight binary mitigation audit
+uv run airgap-audit package create --payload lvgl_gui --key keys/private_key.pem --out lvgl_gui.update --audit
+
+# Inspect container metadata
+uv run airgap-audit package inspect --package lvgl_gui.update
+
+# Run companion update check (on target device)
 uv run airgap-audit update-check
 ```
 

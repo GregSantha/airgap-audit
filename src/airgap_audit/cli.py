@@ -9,6 +9,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from airgap_audit.audit import (
+    AuditError,
+    AuditReport,
+    ElfAuditor,
+    MitigationStatus,
+    NonElfError,
+)
 from airgap_audit.core.container import (
     ContainerError,
     inspect_container,
@@ -40,6 +47,13 @@ package_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(package_app, name="package")
+
+audit_app = typer.Typer(
+    name="audit",
+    help="Audit ELF binaries and embedded applications for compile/link security mitigations.",
+    no_args_is_help=True,
+)
+app.add_typer(audit_app, name="audit")
 
 console = Console()
 
@@ -95,8 +109,27 @@ def package_create(
         str | None,
         typer.Option("--device-id", "-d", help="Target device identifier. Defaults to version.h."),
     ] = None,
+    audit_preflight: Annotated[
+        bool,
+        typer.Option("--audit", help="Run pre-flight binary mitigation audit before packaging."),
+    ] = False,
 ) -> None:
     """Pack and sign an ELF binary into a sealed .update container."""
+    if audit_preflight:
+        console.print("[dim cyan]ℹ Running pre-flight binary mitigation audit...[/dim cyan]")
+        try:
+            auditor = ElfAuditor(payload)
+            audit_rep = auditor.audit()
+            _render_audit_table(audit_rep)
+            if not audit_rep.passed:
+                console.print(
+                    "[bold red][ERROR][/bold red] Pre-flight audit failed: "
+                    "Payload lacks critical exploit mitigations. Aborting packaging."
+                )
+                sys.exit(1)
+        except (NonElfError, AuditError) as exc:
+            console.print(f"[bold red][ERROR][/bold red] Pre-flight audit failed: {exc}")
+            sys.exit(1)
     # Attempt auto-detection from C++ version.h header if any metadata is omitted
     header_info = None
     if version is None or epoch is None or device_id is None:
@@ -234,6 +267,94 @@ def package_inspect(
     table.add_row("Ed25519 Signature", f"{header.signature_hex[:32]}... ({len(header.signature)} bytes)")
 
     console.print(table)
+
+
+def _render_audit_table(report: AuditReport) -> None:
+    """Render a visual, formatted mitigation audit report with Rich."""
+    meta_info = (
+        f"[bold]Target:[/bold] {report.target_path}\n"
+        f"[bold]Architecture:[/bold] {report.architecture} ({report.elf_class}-bit {report.endianness}-endian)\n"
+        f"[bold]File Size:[/bold] {report.file_size:,} bytes\n"
+        f"[bold]SHA-256:[/bold] {report.sha256}"
+    )
+    console.print(Panel(meta_info, title="[bold cyan]ELF Binary Metadata[/bold cyan]", border_style="cyan"))
+
+    table = Table(title="Security Mitigations (checksec equivalent)", border_style="blue")
+    table.add_column("Mitigation", style="bold", no_wrap=True)
+    table.add_column("Status", justify="center")
+    table.add_column("CWE", style="dim")
+    table.add_column("Summary")
+    table.add_column("Remediation Flag", style="yellow")
+
+    for c in report.checks:
+        if c.status == MitigationStatus.PASS:
+            status_badge = "[bold green]PASS[/bold green]"
+        elif c.status == MitigationStatus.FAIL:
+            status_badge = "[bold red]FAIL[/bold red]"
+        elif c.status == MitigationStatus.WARN:
+            status_badge = "[bold yellow]WARN[/bold yellow]"
+        else:
+            status_badge = "[dim blue]INFO[/dim blue]"
+
+        table.add_row(
+            c.name,
+            status_badge,
+            c.cwe_id,
+            c.summary,
+            c.remediation,
+        )
+
+    console.print(table)
+
+    score_color = "green" if report.score >= 80 else ("yellow" if report.score >= 50 else "red")
+    pass_badge = "[bold green]PASSED[/bold green]" if report.passed else "[bold red]FAILED[/bold red]"
+    console.print(
+        Panel.fit(
+            f"Hardening Score: [{score_color}]{report.score}%[/{score_color}] | Production Status: {pass_badge}",
+            border_style=score_color,
+        )
+    )
+
+
+@audit_app.command("elf")
+def audit_elf(
+    binary: Annotated[Path, typer.Argument(help="Path to the ELF binary to audit.")],
+    format: Annotated[str, typer.Option("--format", "-f", help="Output format: 'table' or 'json'.")] = "table",
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", "-s", help="Exit with code 1 if any critical exploit mitigation fails."),
+    ] = False,
+    min_score: Annotated[
+        int,
+        typer.Option("--min-score", "-m", help="Minimum required hardening score (0-100)."),
+    ] = 80,
+) -> None:
+    """Audit an ELF binary for security mitigations (NX, PIE, Canary, Full RELRO, Fortify, RPATH)."""
+    try:
+        auditor = ElfAuditor(binary)
+        report = auditor.audit()
+    except (FileNotFoundError, NonElfError, AuditError) as exc:
+        console.print(f"[bold red][ERROR][/bold red] Audit failed: {exc}")
+        sys.exit(1)
+
+    if format.lower() == "json":
+        console.print_json(report.model_dump_json(indent=2))
+    else:
+        _render_audit_table(report)
+
+    failed_reasons: list[str] = []
+    if strict and not report.passed:
+        failed_reasons.append("Binary failed one or more critical exploit mitigations (NX, Canary, PIE, or Full RELRO)")
+    if report.score < min_score:
+        failed_reasons.append(f"Hardening score {report.score}% is below required threshold of {min_score}%")
+
+    if failed_reasons:
+        for reason in failed_reasons:
+            console.print(f"[bold red][FAIL][/bold red] {reason}")
+        sys.exit(1)
+    else:
+        if format.lower() != "json":
+            console.print("[bold green][PASS][/bold green] Binary satisfies all mitigation requirements.")
 
 
 @app.command()
