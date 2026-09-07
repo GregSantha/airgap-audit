@@ -1,8 +1,9 @@
 """
-Offline USB Application Update Agent (ARMv8 / DietPi).
+Offline USB update agent for embedded Linux (DietPi / ARMv8).
 
-Runs from systemd ExecStartPre to detect, verify (via Ed25519 digital signature,
-hardware binding, security epoch anti-rollback), and atomically apply binary updates from USB.
+Runs as systemd ExecStartPre to detect removable USB drives, verify Ed25519-signed
+.update containers, enforce anti-rollback via security epochs, and atomically
+replace the target binary.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ def get_file_sha256(path: Path) -> str:
 
 
 def find_usb_partitions() -> list[dict[str, Any]]:
-    """Discover removable USB partitions via lsblk, ignoring internal SD/system disks."""
+    """Scan removable USB partitions, ignoring internal system disks."""
     cmd = ["lsblk", "-J", "-o", "NAME,PATH,TRAN,RM,FSTYPE,MOUNTPOINTS,MOUNTPOINT"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -132,12 +133,10 @@ def get_current_security_epoch(epoch_file: Path = EPOCH_FILE) -> int:
 
 
 def apply_update(source: Path, target: Path = TARGET_BIN, state_file: Path = STATE_FILE) -> bool:
-    """Atomically install binary if SHA-256 differs from host state file (legacy/unauthenticated).
+    """Atomically install binary if SHA-256 differs from host state file.
 
-    Note:
-        Retained as the initial Step 1 prototype for unauthenticated hash-based updates.
-        Production offline deployments MUST use `apply_signed_update` for Ed25519 signature
-        verification, anti-rollback protection, and security epoch enforcement.
+    Step 1 prototype (unauthenticated, hash-only). Retained for reference;
+    production deployments use ``apply_signed_update`` (Ed25519 + anti-rollback).
     """
     new_hash = get_file_sha256(source)
     if state_file.is_file() and state_file.read_text().strip() == new_hash:
