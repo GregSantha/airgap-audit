@@ -51,7 +51,7 @@ def parse_version_header(header_path: Path) -> dict[str, Any]:
     # Match constexpr const char* VERSION = "0.1.0";
     ver_match = re.search(r'VERSION\s*=\s*"([^"]+)"', content)
     # Match constexpr unsigned int SECURITY_EPOCH = 1;
-    epoch_match = re.search(r'SECURITY_EPOCH\s*=\s*(\d+)', content)
+    epoch_match = re.search(r"SECURITY_EPOCH\s*=\s*(\d+)", content)
     # Match constexpr const char* DEVICE_ID = "lvgl_gui";
     dev_match = re.search(r'DEVICE_ID\s*=\s*"([^"]+)"', content)
 
@@ -79,17 +79,21 @@ def find_version_header(hint_path: Path | None = None) -> Path | None:
     candidates = []
     if hint_path:
         # If hint_path is payload: e.g. lvgl_gui/build/arm64-release/lvgl_gui -> lvgl_gui/version.h
-        candidates.extend([
-            hint_path.parent / "version.h",
-            hint_path.parent.parent / "version.h",
-            hint_path.parent.parent.parent / "version.h",
-        ])
+        candidates.extend(
+            [
+                hint_path.parent / "version.h",
+                hint_path.parent.parent / "version.h",
+                hint_path.parent.parent.parent / "version.h",
+            ]
+        )
 
-    candidates.extend([
-        Path("lvgl_gui/version.h"),
-        Path("../lvgl_gui/version.h"),
-        Path("version.h"),
-    ])
+    candidates.extend(
+        [
+            Path("lvgl_gui/version.h"),
+            Path("../lvgl_gui/version.h"),
+            Path("version.h"),
+        ]
+    )
 
     for c in candidates:
         if c.is_file():
