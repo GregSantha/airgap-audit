@@ -3,7 +3,8 @@ Binary container packaging and verification for airgap-audit.
 
 Defines the sealed `<target>.update` single-file container format (magic b"AGUP"),
 featuring cryptographic header binding, Ed25519 signature verification,
-device ID matching, anti-rollback checks, and SHA-256 payload integrity.
+hardware device ID binding, dual-versioning (App Version + Security Epoch),
+and SHA-256 payload integrity.
 """
 
 from __future__ import annotations
@@ -22,10 +23,10 @@ from airgap_audit.core.crypto import (
 
 MAGIC = b"AGUP"
 SUPPORTED_HEADER_VERSION = 1
-HEADER_FORMAT_SIGNED = ">4sII20sQ32s"
-HEADER_FORMAT_FULL = ">4sII20sQ32s64s"
-HEADER_SIGNED_SIZE = struct.calcsize(HEADER_FORMAT_SIGNED)  # 72 bytes
-HEADER_FULL_SIZE = struct.calcsize(HEADER_FORMAT_FULL)      # 136 bytes
+HEADER_FORMAT_SIGNED = ">4sIII20sQ32s"
+HEADER_FORMAT_FULL = ">4sIII20sQ32s64s"
+HEADER_SIGNED_SIZE = struct.calcsize(HEADER_FORMAT_SIGNED)  # 76 bytes
+HEADER_FULL_SIZE = struct.calcsize(HEADER_FORMAT_FULL)      # 140 bytes
 DEVICE_ID_MAX_LEN = 20
 
 
@@ -50,7 +51,7 @@ class DeviceMismatchError(ContainerError):
 
 
 class RollbackVersionError(ContainerError):
-    """Raised when the candidate version is lower than the minimum allowed version."""
+    """Raised when candidate security epoch is lower than the minimum allowed security epoch."""
 
 
 class PayloadChecksumError(ContainerError):
@@ -65,7 +66,8 @@ class TruncatedContainerError(ContainerError):
 class ContainerHeader:
     magic: bytes
     header_version: int
-    monotonic_version: int
+    app_version: int
+    security_epoch: int
     device_id: str
     payload_length: int
     payload_sha256: bytes
@@ -97,16 +99,16 @@ def _parse_device_id(raw_bytes: bytes) -> str:
 
 def parse_header_bytes(header_bytes: bytes) -> tuple[ContainerHeader, bytes]:
     """
-    Parse a 136-byte container header.
+    Parse a 140-byte container header.
 
-    Returns the ContainerHeader instance and the 72-byte signed prefix.
+    Returns the ContainerHeader instance and the 76-byte signed prefix.
     """
     if len(header_bytes) < HEADER_FULL_SIZE:
         raise TruncatedContainerError(
             f"Header too short: expected {HEADER_FULL_SIZE} bytes, got {len(header_bytes)}"
         )
 
-    magic, hdr_ver, mono_ver, raw_dev_id, payload_len, payload_sha, sig = struct.unpack(
+    magic, hdr_ver, app_ver, sec_epoch, raw_dev_id, payload_len, payload_sha, sig = struct.unpack(
         HEADER_FORMAT_FULL, header_bytes[:HEADER_FULL_SIZE]
     )
 
@@ -126,7 +128,8 @@ def parse_header_bytes(header_bytes: bytes) -> tuple[ContainerHeader, bytes]:
     header = ContainerHeader(
         magic=magic,
         header_version=hdr_ver,
-        monotonic_version=mono_ver,
+        app_version=app_ver,
+        security_epoch=sec_epoch,
         device_id=device_id,
         payload_length=payload_len,
         payload_sha256=payload_sha,
@@ -149,21 +152,22 @@ def inspect_container(path: Path) -> ContainerHeader:
 
 def pack_container(
     payload_path: Path,
-    version: int,
+    app_version: int,
     device_id: str,
     private_key: ed25519.Ed25519PrivateKey,
+    security_epoch: int = 1,
     out_path: Path | None = None,
 ) -> bytes:
     """
-    Package an ELF binary into a signed .update container.
+    Package an ELF binary into a signed .update container with dual versioning.
 
     Writes to out_path if provided, and returns the full container bytes.
     """
     if not payload_path.is_file():
         raise FileNotFoundError(f"Payload file not found: {payload_path}")
 
-    if version < 0:
-        raise ValueError("Version must be a non-negative integer")
+    if app_version < 0 or security_epoch < 0:
+        raise ValueError("App version and security epoch must be non-negative integers")
 
     payload_bytes = payload_path.read_bytes()
     payload_length = len(payload_bytes)
@@ -171,21 +175,22 @@ def pack_container(
 
     dev_id_bytes = _format_device_id(device_id)
 
-    # Pack the 72-byte signed header prefix
+    # Pack the 76-byte signed header prefix
     signed_prefix = struct.pack(
         HEADER_FORMAT_SIGNED,
         MAGIC,
         SUPPORTED_HEADER_VERSION,
-        version,
+        app_version,
+        security_epoch,
         dev_id_bytes,
         payload_length,
         payload_sha256,
     )
 
-    # Sign the 72-byte prefix with Ed25519
+    # Sign the 76-byte prefix with Ed25519
     signature = sign_data(private_key, signed_prefix)
 
-    # Assemble complete container: 72-byte prefix + 64-byte signature + payload
+    # Assemble complete container: 76-byte prefix + 64-byte signature + payload
     container_bytes = signed_prefix + signature + payload_bytes
 
     if out_path:
@@ -199,10 +204,10 @@ def unpack_and_verify(
     container_path: Path,
     public_key: ed25519.Ed25519PublicKey,
     expected_device_id: str | None = None,
-    min_version: int = 0,
+    min_epoch: int = 0,
 ) -> tuple[bytes, ContainerHeader]:
     """
-    Verify container authenticity, hardware binding, version, and payload integrity.
+    Verify container authenticity, hardware binding, security epoch, and payload integrity.
 
     Returns the unpacked payload bytes and the validated ContainerHeader.
     """
@@ -223,10 +228,11 @@ def unpack_and_verify(
                 f"Device ID mismatch: container targets '{header.device_id}', expected '{expected_device_id}'"
             )
 
-        # 3. Check anti-rollback version
-        if header.monotonic_version < min_version:
+        # 3. Check anti-rollback on Security Epoch
+        if header.security_epoch < min_epoch:
             raise RollbackVersionError(
-                f"Rollback rejected: candidate version {header.monotonic_version} < minimum version {min_version}"
+                f"Rollback rejected: candidate security epoch {header.security_epoch} < "
+                f"minimum required security epoch {min_epoch} (CWE-1328 protection)"
             )
 
         # 4. Stream and verify payload

@@ -36,7 +36,9 @@ Verified on real DietPi hardware during boot:
 ## Step 2: Cryptographic Container & Hardware Binding (CWE-494 Remediation)
 
 ### 1. What We Did & Architecture
-We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 136-byte cryptographic header encapsulates the format version, a monotonic counter for anti-rollback protection, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, and its SHA-256 digest, signed with **Ed25519** (64-byte asymmetric signature). On the target device, `updater.py` validates the digital signature against a trusted public key (`/etc/airgap/public_key.pem`), verifies device binding and monotonic versioning (`version >= installed_version`), checks the payload digest, and unpacks the clean ELF binary directly to `/home/dietpi/lvgl_gui`.
+We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 140-byte cryptographic header encapsulates format metadata, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, its SHA-256 digest, and an asymmetric **Ed25519** signature covering the header fields. Crucially, the container implements an industry-standard **dual-versioning model**:
+* **App Version (Feature Version):** Identifies the user-space feature release. Moving between feature versions within the same security epoch (upgrading or rolling back during lab/QA validation) is permitted.
+* **Security Epoch (Anti-Rollback Index):** Monotonically enforced counter. Incremented *only* when a security vulnerability (CWE) is resolved. The updater rejects any candidate where `security_epoch < installed_epoch`.
 
 ```
 [Developer Machine: cmake build] ──> [airgap-audit package create (Ed25519 privkey)] ──> [lvgl_gui.update]
@@ -45,20 +47,21 @@ We remediated CWE-494 by implementing a post-build signing tool and a sealed sin
                                     ▼
        [airgap-updater validates Ed25519 signature via /etc/airgap/public_key.pem]
             ├── FAIL: Log security error & reject update (leave host intact)
-            └── PASS: Check device ID & version ──> Atomic unpack to /home/dietpi/lvgl_gui
+            └── PASS: Check device ID & Security Epoch ──> Atomic unpack to /home/dietpi/lvgl_gui
 ```
 
 ### 2. The Vulnerability Remediation & Interview Takeaway
-This step completely eliminates **CWE-494** and **CWE-353**. An attacker with physical USB access can no longer inject a rogue binary or modified shell script: without the private signing key, any altered payload fails the Ed25519 signature or SHA-256 check and is rejected before execution. Furthermore, monotonic version tracking prevents **firmware rollback / downgrade attacks** where an adversary tries to re-flash a legitimate older version known to contain exploitable vulnerabilities.
+This step eliminates **CWE-494** (Unauthenticated Code Download) and **CWE-1328** (Downgrade / Rollback to Vulnerable Version). Without the private key, an adversary cannot forge valid containers. Furthermore, separating feature versions from the security epoch solves the real-world operational problem: engineers can freely rollback broken UI features in testing, but once a security vulnerability is closed (e.g. bumping from Epoch 1 to 2 in `v1.1.1`), an attacker can never re-flash the vulnerable `v1.1.0` binary onto field devices.
 
 ### 3. Verification & Tamper Resistance Proof
-Verified via automated test suite across 5 attack scenarios:
+Verified via automated test suite across 6 verification scenarios:
 ```text
 [PASS] Signature tampering: Bit-flipped signature rejected with SignatureError
 [PASS] Payload tampering: Bit-flipped ELF bytes rejected with PayloadChecksumError
 [PASS] Rogue key injection: Container signed with untrusted key rejected
 [PASS] Hardware mismatch: Update targeting 'other_hw' rejected on 'lvgl_gui'
-[PASS] Rollback attack: Version 1 package rejected when device is at version 2
+[PASS] Feature rollback in same epoch: Downgrading v1.1.0 to v1.0.0 (Epoch 1) succeeds
+[PASS] Security epoch rollback: Flashing Epoch 1 package when device is at Epoch 2 is rejected
 ```
 
 ---

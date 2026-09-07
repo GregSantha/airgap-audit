@@ -2,7 +2,7 @@
 Offline USB Application Update Agent (ARMv8 / DietPi).
 
 Runs from systemd ExecStartPre to detect, verify (via Ed25519 digital signature,
-hardware binding, anti-rollback), and atomically apply binary updates from a USB flash drive.
+hardware binding, security epoch anti-rollback), and atomically apply binary updates from USB.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ logger = logging.getLogger("airgap_updater")
 TARGET_BIN = Path(os.getenv("TARGET_BIN", "/home/dietpi/lvgl_gui"))
 STATE_FILE = TARGET_BIN.parent / f".{TARGET_BIN.name}_hash"
 VERSION_FILE = TARGET_BIN.parent / f".{TARGET_BIN.name}_version"
+EPOCH_FILE = TARGET_BIN.parent / f".{TARGET_BIN.name}_epoch"
 PUBLIC_KEY_PATH = Path(os.getenv("AIRGAP_PUBLIC_KEY", "/etc/airgap/public_key.pem"))
 TEMP_MOUNT = Path("/tmp/airgap_usb")
 SUPPORTED_FS = {"vfat", "fat", "exfat", "ext4"}
@@ -102,12 +103,23 @@ def mount_usb_readonly(device: str, existing_mount: str | None) -> Generator[Pat
 
 
 def get_current_installed_version(version_file: Path = VERSION_FILE) -> int:
-    """Read the currently installed monotonic version number (defaults to 0)."""
+    """Read the currently installed feature version number (defaults to 0)."""
     if version_file.is_file():
         try:
             return int(version_file.read_text().strip())
         except ValueError:
             logger.warning("Corrupted version file at %s, treating as 0", version_file)
+            return 0
+    return 0
+
+
+def get_current_security_epoch(epoch_file: Path = EPOCH_FILE) -> int:
+    """Read the currently installed security epoch (defaults to 0)."""
+    if epoch_file.is_file():
+        try:
+            return int(epoch_file.read_text().strip())
+        except ValueError:
+            logger.warning("Corrupted epoch file at %s, treating as 0", epoch_file)
             return 0
     return 0
 
@@ -145,6 +157,7 @@ def apply_signed_update(
     target: Path = TARGET_BIN,
     state_file: Path = STATE_FILE,
     version_file: Path = VERSION_FILE,
+    epoch_file: Path = EPOCH_FILE,
 ) -> bool:
     """
     Verify and atomically apply a signed .update container package.
@@ -152,8 +165,9 @@ def apply_signed_update(
     Enforces:
     1. Public key presence and Ed25519 signature validity.
     2. Target hardware device ID matching.
-    3. Monotonic anti-rollback protection (candidate version >= current).
-    4. Payload integrity check (SHA-256).
+    3. Security Epoch anti-rollback (candidate epoch >= current epoch).
+    4. Allows feature version rollbacks within the same security epoch.
+    5. Payload integrity check (SHA-256).
     """
     if not public_key_path.is_file():
         logger.error(
@@ -168,6 +182,7 @@ def apply_signed_update(
         logger.error("Failed to load public key: %s", err)
         return False
 
+    current_epoch = get_current_security_epoch(epoch_file)
     current_version = get_current_installed_version(version_file)
 
     try:
@@ -175,30 +190,33 @@ def apply_signed_update(
             container_path=container_path,
             public_key=public_key,
             expected_device_id=target.name,
-            min_version=current_version,
+            min_epoch=current_epoch,
         )
     except ContainerError as err:
         logger.error("Security verification failed for %s: %s", container_path, err)
         return False
 
-    # Check if identical version and hash already installed (prevent redundant write cycles)
+    # Prevent redundant write cycles if same epoch, version, and binary hash already installed
     if (
-        header.monotonic_version == current_version
+        header.security_epoch == current_epoch
+        and header.app_version == current_version
         and state_file.is_file()
         and state_file.read_text().strip() == header.payload_sha256_hex
     ):
         logger.info(
-            "Package %s matches installed version (%d) and hash (%s...). Skipping.",
+            "Package %s matches installed version (App: %d, Epoch: %d) and hash (%s...). Skipping.",
             container_path.name,
             current_version,
+            current_epoch,
             header.payload_sha256_hex[:10],
         )
         return False
 
     logger.info(
-        "Verified update: version %d (current %d), device '%s', SHA-256 %s... Installing to %s",
-        header.monotonic_version,
-        current_version,
+        "Verified update: App Version %d, Epoch %d (current Epoch %d), device '%s', SHA-256 %s... Installing to %s",
+        header.app_version,
+        header.security_epoch,
+        current_epoch,
         header.device_id,
         header.payload_sha256_hex[:10],
         target,
@@ -210,7 +228,7 @@ def apply_signed_update(
     # 3. Chown to target directory's owner (if running as root)
     # 4. Copy current target to target.bak
     # 5. os.replace(staging, target)
-    # 6. Update version and hash state files
+    # 6. Update version, epoch, and hash state files
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = target.with_suffix(".new")
     staging.write_bytes(payload_bytes)
@@ -225,9 +243,15 @@ def apply_signed_update(
 
     os.replace(staging, target)
     state_file.write_text(f"{header.payload_sha256_hex}\n")
-    version_file.write_text(f"{header.monotonic_version}\n")
+    version_file.write_text(f"{header.app_version}\n")
+    epoch_file.write_text(f"{header.security_epoch}\n")
 
-    logger.info("Successfully updated %s to version %d", target, header.monotonic_version)
+    logger.info(
+        "Successfully updated %s to App Version %d (Security Epoch %d)",
+        target,
+        header.app_version,
+        header.security_epoch,
+    )
     return True
 
 
@@ -235,6 +259,7 @@ def run(
     target: Path = TARGET_BIN,
     state_file: Path = STATE_FILE,
     version_file: Path = VERSION_FILE,
+    epoch_file: Path = EPOCH_FILE,
     public_key_path: Path = PUBLIC_KEY_PATH,
 ) -> bool:
     """Search plugged USB drives for signed package (<target>.update) and apply update."""
@@ -256,6 +281,7 @@ def run(
                         target=target,
                         state_file=state_file,
                         version_file=version_file,
+                        epoch_file=epoch_file,
                     )
         except subprocess.SubprocessError as err:
             logger.error("Failed to read USB %s: %s", dev["device"], err)

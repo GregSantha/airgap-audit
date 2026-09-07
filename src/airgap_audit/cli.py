@@ -76,17 +76,22 @@ def keygen(
 @package_app.command("create")
 def package_create(
     payload: Annotated[Path, typer.Option("--payload", "-p", help="Executable ELF binary to wrap.")],
-    version: Annotated[int, typer.Option("--version", "-v", help="Monotonic version number (e.g. 1).")],
     device_id: Annotated[str, typer.Option("--device-id", "-d", help="Target hardware device identifier.")],
     key: Annotated[Path, typer.Option("--key", "-k", help="Path to Ed25519 private key PEM file.")],
     out: Annotated[Path, typer.Option("--out", "-o", help="Output .update container filepath.")],
+    version: Annotated[int, typer.Option("--version", "-v", help="Application feature version number (e.g. 1).")] = 1,
+    epoch: Annotated[
+        int,
+        typer.Option("--epoch", "-e", help="Security epoch for anti-rollback protection (default: 1)."),
+    ] = 1,
 ) -> None:
-    """Pack and sign an ELF binary into a sealed .update container."""
+    """Pack and sign an ELF binary into a sealed .update container with dual-versioning."""
     try:
         priv_key = load_private_key(key)
         container_bytes = pack_container(
             payload_path=payload,
-            version=version,
+            app_version=version,
+            security_epoch=epoch,
             device_id=device_id,
             private_key=priv_key,
             out_path=out,
@@ -100,7 +105,8 @@ def package_create(
             f"[bold green]✓ Sealed Container Created[/bold green]\n\n"
             f"[bold]Output Package:[/bold] [yellow]{out}[/yellow] ({len(container_bytes):,} bytes)\n"
             f"[bold]Device ID:     [/bold] [cyan]{device_id}[/cyan]\n"
-            f"[bold]Version:       [/bold] [cyan]{version}[/cyan]\n"
+            f"[bold]App Version:   [/bold] [cyan]{version}[/cyan] (Feature version)\n"
+            f"[bold]Security Epoch:[/bold] [magenta]{epoch}[/magenta] (Anti-rollback index)\n"
             f"[bold]Payload:       [/bold] {payload.name} ({payload.stat().st_size:,} bytes)",
             title="Package Create",
             border_style="green",
@@ -116,19 +122,19 @@ def package_verify(
         str | None,
         typer.Option("--device-id", "-d", help="Expected device ID (optional check)."),
     ] = None,
-    min_version: Annotated[
+    min_epoch: Annotated[
         int,
-        typer.Option("--min-version", "-m", help="Minimum required monotonic version."),
+        typer.Option("--min-epoch", "-m", help="Minimum required security epoch for anti-rollback."),
     ] = 0,
 ) -> None:
-    """Verify digital signature, device ID, version, and payload integrity of a container."""
+    """Verify digital signature, device ID, security epoch, and payload integrity of a container."""
     try:
         pub_key = load_public_key(key)
         _payload_bytes, header = unpack_and_verify(
             container_path=package,
             public_key=pub_key,
             expected_device_id=device_id,
-            min_version=min_version,
+            min_epoch=min_epoch,
         )
     except (CryptoError, ContainerError, OSError) as exc:
         console.print(f"[bold red][FAIL][/bold red] Verification failed: {exc}")
@@ -137,10 +143,11 @@ def package_verify(
     console.print(
         Panel.fit(
             f"[bold green]✓ Container Verification Passed[/bold green]\n\n"
-            f"[bold]Device ID:[/bold]  {header.device_id}\n"
-            f"[bold]Version:  [/bold]  {header.monotonic_version}\n"
-            f"[bold]Payload:  [/bold]  {header.payload_length:,} bytes (SHA-256: {header.payload_sha256_hex[:16]}...)\n"
-            f"[bold]Signature:[/bold]  Valid Ed25519 ({header.signature_hex[:16]}...)",
+            f"[bold]Device ID:     [/bold] {header.device_id}\n"
+            f"[bold]App Version:   [/bold] {header.app_version}\n"
+            f"[bold]Security Epoch:[/bold] {header.security_epoch}\n"
+            f"[bold]Payload:       [/bold] {header.payload_length:,} bytes (SHA-256: {header.payload_sha256_hex[:16]}...)\n"
+            f"[bold]Signature:     [/bold] Valid Ed25519 ({header.signature_hex[:16]}...)",
             title="Package Verification",
             border_style="green",
         )
@@ -164,7 +171,8 @@ def package_inspect(
 
     table.add_row("Magic Bytes", str(header.magic))
     table.add_row("Header Version", str(header.header_version))
-    table.add_row("Monotonic Version", str(header.monotonic_version))
+    table.add_row("App Version (Feature)", str(header.app_version))
+    table.add_row("Security Epoch (Anti-Rollback)", str(header.security_epoch))
     table.add_row("Target Device ID", header.device_id)
     table.add_row("Payload Length", f"{header.payload_length:,} bytes")
     table.add_row("Payload SHA-256", header.payload_sha256_hex)
