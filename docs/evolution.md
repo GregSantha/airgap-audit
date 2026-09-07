@@ -32,3 +32,33 @@ Verified on real DietPi hardware during boot:
 ```
 
 ---
+
+## Step 2: Cryptographic Container & Hardware Binding (CWE-494 Remediation)
+
+### 1. What We Did & Architecture
+We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 136-byte cryptographic header encapsulates the format version, a monotonic counter for anti-rollback protection, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, and its SHA-256 digest, signed with **Ed25519** (64-byte asymmetric signature). On the target device, `updater.py` validates the digital signature against a trusted public key (`/etc/airgap/public_key.pem`), verifies device binding and monotonic versioning (`version >= installed_version`), checks the payload digest, and unpacks the clean ELF binary directly to `/home/dietpi/lvgl_gui`.
+
+```
+[Developer Machine: cmake build] ──> [airgap-audit package create (Ed25519 privkey)] ──> [lvgl_gui.update]
+                                                                                               │
+                                    ┌────────────────── [Physical USB Mount on DietPi] ────────┘
+                                    ▼
+       [airgap-updater validates Ed25519 signature via /etc/airgap/public_key.pem]
+            ├── FAIL: Log security error & reject update (leave host intact)
+            └── PASS: Check device ID & version ──> Atomic unpack to /home/dietpi/lvgl_gui
+```
+
+### 2. The Vulnerability Remediation & Interview Takeaway
+This step completely eliminates **CWE-494** and **CWE-353**. An attacker with physical USB access can no longer inject a rogue binary or modified shell script: without the private signing key, any altered payload fails the Ed25519 signature or SHA-256 check and is rejected before execution. Furthermore, monotonic version tracking prevents **firmware rollback / downgrade attacks** where an adversary tries to re-flash a legitimate older version known to contain exploitable vulnerabilities.
+
+### 3. Verification & Tamper Resistance Proof
+Verified via automated test suite across 5 attack scenarios:
+```text
+[PASS] Signature tampering: Bit-flipped signature rejected with SignatureError
+[PASS] Payload tampering: Bit-flipped ELF bytes rejected with PayloadChecksumError
+[PASS] Rogue key injection: Container signed with untrusted key rejected
+[PASS] Hardware mismatch: Update targeting 'other_hw' rejected on 'lvgl_gui'
+[PASS] Rollback attack: Version 1 package rejected when device is at version 2
+```
+
+---
