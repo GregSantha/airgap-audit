@@ -80,8 +80,8 @@ def test_get_file_sha256(tmp_path: Path) -> None:
 
 def test_find_usb_partitions_real_dietpi_hardware(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify partition discovery against the exact lsblk JSON from the physical DietPi device."""
-    def mock_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout=REAL_DIETPI_LSBLK_JSON)
+    def mock_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=["lsblk"], returncode=0, stdout=REAL_DIETPI_LSBLK_JSON)
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     partitions = find_usb_partitions()
