@@ -39,6 +39,7 @@ Verified on real DietPi hardware during boot:
 We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 140-byte cryptographic header encapsulates format metadata, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, its SHA-256 digest, and an asymmetric **Ed25519** signature covering the header fields. Crucially, the container implements an industry-standard **dual-versioning model**:
 * **App Version (Feature Version):** Identifies the user-space feature release. Moving between feature versions within the same security epoch (upgrading or rolling back during lab/QA validation) is permitted.
 * **Security Epoch (Anti-Rollback Index):** Monotonically enforced counter. Incremented *only* when a security vulnerability (CWE) is resolved. The updater rejects any candidate where `security_epoch < installed_epoch`.
+* **Single Source of Truth (`version.h`):** Defined cleanly in `lvgl_gui/version.h` (`VERSION`, `SECURITY_EPOCH`, `DEVICE_ID`). The Python packaging tool auto-detects this header and deterministically maps SemVer strings (`"0.1.0"` $\to$ `100`) to integer version codes without redundant manual flags.
 
 ```
 [Developer Machine: cmake build] ──> [airgap-audit package create (Ed25519 privkey)] ──> [lvgl_gui.update]

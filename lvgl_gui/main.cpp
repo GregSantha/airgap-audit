@@ -6,11 +6,9 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/src/drivers/display/drm/lv_linux_drm.h"
 #include "lvgl/src/drivers/libinput/lv_libinput.h"
+#include "version.h"
 
 namespace {
-    constexpr const char* APP_VERSION = "0.1.0";
-    constexpr const char* DEVICE_ID = "lvgl_gui";
-
     std::atomic<bool> g_running { true };
     void handleSignal(int /*sig*/) { g_running = false; }
 
@@ -65,7 +63,7 @@ int main()
 
     // --- Sample UI (ensures the display shows active content) ---
     lv_obj_t* label = lv_label_create(lv_screen_active());
-    std::string labelText = std::string("Airgap Audit Kiosk\nDevice: ") + DEVICE_ID + "\nVersion: " + APP_VERSION;
+    std::string labelText = std::string("Airgap Audit Kiosk\nDevice: ") + app_meta::DEVICE_ID + "\nVersion: " + app_meta::VERSION;
     lv_label_set_text(label, labelText.c_str());
     lv_obj_center(label);
 

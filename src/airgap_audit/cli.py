@@ -23,6 +23,11 @@ from airgap_audit.core.crypto import (
     save_private_key,
     save_public_key,
 )
+from airgap_audit.core.version import (
+    find_version_header,
+    parse_version_header,
+    semver_to_code,
+)
 
 app = typer.Typer(
     name="airgap-audit",
@@ -76,23 +81,73 @@ def keygen(
 @package_app.command("create")
 def package_create(
     payload: Annotated[Path, typer.Option("--payload", "-p", help="Executable ELF binary to wrap.")],
-    device_id: Annotated[str, typer.Option("--device-id", "-d", help="Target hardware device identifier.")],
     key: Annotated[Path, typer.Option("--key", "-k", help="Path to Ed25519 private key PEM file.")],
     out: Annotated[Path, typer.Option("--out", "-o", help="Output .update container filepath.")],
-    version: Annotated[int, typer.Option("--version", "-v", help="Application feature version number (e.g. 1).")] = 1,
+    version: Annotated[
+        str | None,
+        typer.Option("--version", "-v", help="Feature version (e.g. '0.1.0' or 100). Defaults to version.h."),
+    ] = None,
     epoch: Annotated[
-        int,
-        typer.Option("--epoch", "-e", help="Security epoch for anti-rollback protection (default: 1)."),
-    ] = 1,
+        int | None,
+        typer.Option("--epoch", "-e", help="Security epoch for anti-rollback. Defaults to version.h."),
+    ] = None,
+    device_id: Annotated[
+        str | None,
+        typer.Option("--device-id", "-d", help="Target device identifier. Defaults to version.h."),
+    ] = None,
 ) -> None:
-    """Pack and sign an ELF binary into a sealed .update container with dual-versioning."""
+    """Pack and sign an ELF binary into a sealed .update container."""
+    # Attempt auto-detection from C++ version.h header if any metadata is omitted
+    header_info = None
+    if version is None or epoch is None or device_id is None:
+        header_file = find_version_header(payload)
+        if header_file:
+            try:
+                header_info = parse_version_header(header_file)
+            except (OSError, ValueError) as exc:
+                console.print(f"[dim yellow]Warning: Failed to parse {header_file}: {exc}[/dim yellow]")
+
+    # Resolve version
+    resolved_version_code: int
+    if version is not None:
+        resolved_version_code = semver_to_code(version)
+    elif header_info:
+        resolved_version_code = int(header_info["version_code"])
+    else:
+        resolved_version_code = 1
+
+    # Resolve epoch
+    resolved_epoch: int
+    if epoch is not None:
+        resolved_epoch = epoch
+    elif header_info:
+        resolved_epoch = int(header_info["security_epoch"])
+    else:
+        resolved_epoch = 1
+
+    # Resolve device_id
+    resolved_device_id: str
+    if device_id is not None:
+        resolved_device_id = device_id
+    elif header_info:
+        resolved_device_id = str(header_info["device_id"])
+    else:
+        resolved_device_id = payload.name
+
+    if header_info:
+        console.print(
+            f"[dim cyan]ℹ Auto-detected from {header_info['header_path'].name}:[/dim cyan] "
+            f"[dim]Version {header_info['version_str']} (code {resolved_version_code}), "
+            f"Epoch {resolved_epoch}, Device '{resolved_device_id}'[/dim]"
+        )
+
     try:
         priv_key = load_private_key(key)
         container_bytes = pack_container(
             payload_path=payload,
-            app_version=version,
-            security_epoch=epoch,
-            device_id=device_id,
+            app_version=resolved_version_code,
+            security_epoch=resolved_epoch,
+            device_id=resolved_device_id,
             private_key=priv_key,
             out_path=out,
         )
@@ -104,9 +159,9 @@ def package_create(
         Panel.fit(
             f"[bold green]✓ Sealed Container Created[/bold green]\n\n"
             f"[bold]Output Package:[/bold] [yellow]{out}[/yellow] ({len(container_bytes):,} bytes)\n"
-            f"[bold]Device ID:     [/bold] [cyan]{device_id}[/cyan]\n"
-            f"[bold]App Version:   [/bold] [cyan]{version}[/cyan] (Feature version)\n"
-            f"[bold]Security Epoch:[/bold] [magenta]{epoch}[/magenta] (Anti-rollback index)\n"
+            f"[bold]Device ID:     [/bold] [cyan]{resolved_device_id}[/cyan]\n"
+            f"[bold]App Version:   [/bold] [cyan]{resolved_version_code}[/cyan]\n"
+            f"[bold]Security Epoch:[/bold] [magenta]{resolved_epoch}[/magenta] (Anti-rollback)\n"
             f"[bold]Payload:       [/bold] {payload.name} ({payload.stat().st_size:,} bytes)",
             title="Package Create",
             border_style="green",

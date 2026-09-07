@@ -386,3 +386,77 @@ def test_updater_apply_signed_update_flow(keys: KeyFixture, tmp_path: Path) -> N
     assert res_vuln_rollback is False
     assert epoch_file.read_text().strip() == "2"
     assert target.read_bytes() == b"binary v1.1.1 security patch (epoch 2)"
+
+
+def test_version_helpers(tmp_path: Path) -> None:
+    from airgap_audit.core.version import parse_version_header, semver_to_code
+
+    assert semver_to_code("0.1.0") == 100
+    assert semver_to_code("1.2.3") == 10203
+    assert semver_to_code("2.0.0") == 20000
+    assert semver_to_code("100") == 100
+
+    header = tmp_path / "version.h"
+    header.write_text(
+        '#pragma once\n'
+        'namespace app_meta {\n'
+        '    constexpr const char* VERSION = "1.2.3";\n'
+        '    constexpr unsigned int SECURITY_EPOCH = 3;\n'
+        '    constexpr const char* DEVICE_ID = "kiosk_arm64";\n'
+        '}\n'
+    )
+
+    info = parse_version_header(header)
+    assert info["version_str"] == "1.2.3"
+    assert info["version_code"] == 10203
+    assert info["security_epoch"] == 3
+    assert info["device_id"] == "kiosk_arm64"
+
+
+def test_cli_package_auto_detection_from_header(keys: KeyFixture, tmp_path: Path) -> None:
+    _priv, _pub, priv_file, _pub_file = keys
+
+    # Create directory structure with version.h next to payload source
+    app_dir = tmp_path / "my_app"
+    app_dir.mkdir()
+    (app_dir / "version.h").write_text(
+        '#pragma once\n'
+        'namespace app_meta {\n'
+        '    constexpr const char* VERSION = "0.2.0";\n'
+        '    constexpr unsigned int SECURITY_EPOCH = 1;\n'
+        '    constexpr const char* DEVICE_ID = "lvgl_gui";\n'
+        '}\n'
+    )
+
+    build_dir = app_dir / "build"
+    build_dir.mkdir()
+    bin_file = build_dir / "lvgl_gui"
+    bin_file.write_bytes(b"\x7fELFfakebinary")
+
+    out_pkg = tmp_path / "lvgl_gui.update"
+
+    # Run package create without passing --version, --epoch, or --device-id!
+    res = runner.invoke(
+        app,
+        [
+            "package",
+            "create",
+            "--payload",
+            str(bin_file),
+            "--key",
+            str(priv_file),
+            "--out",
+            str(out_pkg),
+        ],
+    )
+    assert res.exit_code == 0
+    assert "Auto-detected from version.h" in res.stdout
+    assert "Version 0.2.0 (code 200)" in res.stdout
+    assert out_pkg.is_file()
+
+    # Verify that the packed container indeed has App Version 200, Epoch 1, Device lvgl_gui
+    header = inspect_container(out_pkg)
+    assert header.app_version == 200
+    assert header.security_epoch == 1
+    assert header.device_id == "lvgl_gui"
+
