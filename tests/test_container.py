@@ -142,7 +142,13 @@ def test_device_id_mismatch_rejected(keys: KeyFixture, tmp_path: Path) -> None:
     payload_file.write_bytes(b"content")
 
     container_file = tmp_path / "test.update"
-    pack_container(payload_file, app_version=1, device_id="other_device", private_key=priv, out_path=container_file)
+    pack_container(
+        payload_file,
+        app_version=1,
+        device_id="other_device",
+        private_key=priv,
+        out_path=container_file,
+    )
 
     with pytest.raises(DeviceMismatchError):
         unpack_and_verify(container_file, pub, expected_device_id="lvgl_gui")
@@ -398,12 +404,12 @@ def test_version_helpers(tmp_path: Path) -> None:
 
     header = tmp_path / "version.h"
     header.write_text(
-        '#pragma once\n'
-        'namespace app_meta {\n'
+        "#pragma once\n"
+        "namespace app_meta {\n"
         '    constexpr const char* VERSION = "1.2.3";\n'
-        '    constexpr unsigned int SECURITY_EPOCH = 3;\n'
+        "    constexpr unsigned int SECURITY_EPOCH = 3;\n"
         '    constexpr const char* DEVICE_ID = "kiosk_arm64";\n'
-        '}\n'
+        "}\n"
     )
 
     info = parse_version_header(header)
@@ -420,12 +426,12 @@ def test_cli_package_auto_detection_from_header(keys: KeyFixture, tmp_path: Path
     app_dir = tmp_path / "my_app"
     app_dir.mkdir()
     (app_dir / "version.h").write_text(
-        '#pragma once\n'
-        'namespace app_meta {\n'
+        "#pragma once\n"
+        "namespace app_meta {\n"
         '    constexpr const char* VERSION = "0.2.0";\n'
-        '    constexpr unsigned int SECURITY_EPOCH = 1;\n'
+        "    constexpr unsigned int SECURITY_EPOCH = 1;\n"
         '    constexpr const char* DEVICE_ID = "lvgl_gui";\n'
-        '}\n'
+        "}\n"
     )
 
     build_dir = app_dir / "build"
@@ -459,4 +465,3 @@ def test_cli_package_auto_detection_from_header(keys: KeyFixture, tmp_path: Path
     assert header.app_version == 200
     assert header.security_epoch == 1
     assert header.device_id == "lvgl_gui"
-

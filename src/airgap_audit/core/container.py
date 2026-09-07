@@ -26,7 +26,7 @@ SUPPORTED_HEADER_VERSION = 1
 HEADER_FORMAT_SIGNED = ">4sIII20sQ32s"
 HEADER_FORMAT_FULL = ">4sIII20sQ32s64s"
 HEADER_SIGNED_SIZE = struct.calcsize(HEADER_FORMAT_SIGNED)  # 76 bytes
-HEADER_FULL_SIZE = struct.calcsize(HEADER_FORMAT_FULL)      # 140 bytes
+HEADER_FULL_SIZE = struct.calcsize(HEADER_FORMAT_FULL)  # 140 bytes
 DEVICE_ID_MAX_LEN = 20
 
 
@@ -86,9 +86,7 @@ def _format_device_id(device_id: str) -> bytes:
     """Encode device ID to fixed 20-byte null-padded UTF-8 bytes."""
     encoded = device_id.strip().encode("utf-8")
     if len(encoded) > DEVICE_ID_MAX_LEN:
-        raise ContainerError(
-            f"Device ID '{device_id}' exceeds maximum length of {DEVICE_ID_MAX_LEN} bytes"
-        )
+        raise ContainerError(f"Device ID '{device_id}' exceeds maximum length of {DEVICE_ID_MAX_LEN} bytes")
     return encoded.ljust(DEVICE_ID_MAX_LEN, b"\x00")
 
 
@@ -104,18 +102,14 @@ def parse_header_bytes(header_bytes: bytes) -> tuple[ContainerHeader, bytes]:
     Returns the ContainerHeader instance and the 76-byte signed prefix.
     """
     if len(header_bytes) < HEADER_FULL_SIZE:
-        raise TruncatedContainerError(
-            f"Header too short: expected {HEADER_FULL_SIZE} bytes, got {len(header_bytes)}"
-        )
+        raise TruncatedContainerError(f"Header too short: expected {HEADER_FULL_SIZE} bytes, got {len(header_bytes)}")
 
     magic, hdr_ver, app_ver, sec_epoch, raw_dev_id, payload_len, payload_sha, sig = struct.unpack(
         HEADER_FORMAT_FULL, header_bytes[:HEADER_FULL_SIZE]
     )
 
     if magic != MAGIC:
-        raise MagicMismatchError(
-            f"Invalid magic bytes: expected {MAGIC!r}, got {magic!r}"
-        )
+        raise MagicMismatchError(f"Invalid magic bytes: expected {MAGIC!r}, got {magic!r}")
 
     if hdr_ver != SUPPORTED_HEADER_VERSION:
         raise UnsupportedHeaderVersionError(
