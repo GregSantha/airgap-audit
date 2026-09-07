@@ -44,3 +44,9 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/lvgl_gui/external",
+    "/lvgl_gui/build",
+]
