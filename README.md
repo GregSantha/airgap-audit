@@ -54,7 +54,7 @@ uv run airgap-audit update-check
 uv build
 ```
 This produces both a source distribution (`.tar.gz`) and a standalone wheel (`.whl`) in `dist/`:
-- `dist/airgap_audit-0.2.0-py3-none-any.whl`
+- `dist/airgap_audit-0.3.0-py3-none-any.whl`
 
 ---
 
@@ -64,10 +64,10 @@ To deploy the companion updater package onto the target device:
 
 ```bash
 # 1. Transfer the wheel to the board:
-scp dist/airgap_audit-0.2.0-py3-none-any.whl dietpi@<dietpi_ip>:/tmp/
+scp dist/airgap_audit-0.3.0-py3-none-any.whl dietpi@<dietpi_ip>:/tmp/
 
 # 2. Install on DietPi:
-sudo pip install --break-system-packages /tmp/airgap_audit-0.2.0-py3-none-any.whl
+sudo pip install --break-system-packages /tmp/airgap_audit-0.3.0-py3-none-any.whl
 ```
 
 ---

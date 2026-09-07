@@ -428,7 +428,7 @@ def test_cli_package_auto_detection_from_header(keys: KeyFixture, tmp_path: Path
     (app_dir / "version.h").write_text(
         "#pragma once\n"
         "namespace app_meta {\n"
-        '    constexpr const char* VERSION = "0.2.0";\n'
+        '    constexpr const char* VERSION = "0.3.0";\n'
         "    constexpr unsigned int SECURITY_EPOCH = 1;\n"
         '    constexpr const char* DEVICE_ID = "lvgl_gui";\n'
         "}\n"
@@ -457,11 +457,11 @@ def test_cli_package_auto_detection_from_header(keys: KeyFixture, tmp_path: Path
     )
     assert res.exit_code == 0
     assert "Auto-detected from version.h" in res.stdout
-    assert "Version 0.2.0 (code 200)" in res.stdout
+    assert "Version 0.3.0 (code 300)" in res.stdout
     assert out_pkg.is_file()
 
-    # Verify that the packed container indeed has App Version 200, Epoch 1, Device lvgl_gui
+    # Verify that the packed container indeed has App Version 300, Epoch 1, Device lvgl_gui
     header = inspect_container(out_pkg)
-    assert header.app_version == 200
+    assert header.app_version == 300
     assert header.security_epoch == 1
     assert header.device_id == "lvgl_gui"
