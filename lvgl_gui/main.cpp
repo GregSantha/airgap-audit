@@ -8,6 +8,9 @@
 #include "lvgl/src/drivers/libinput/lv_libinput.h"
 
 namespace {
+    constexpr const char* APP_VERSION = "0.1.0";
+    constexpr const char* DEVICE_ID = "lvgl_gui";
+
     std::atomic<bool> g_running { true };
     void handleSignal(int /*sig*/) { g_running = false; }
 
@@ -41,7 +44,7 @@ namespace {
     }
 }
 
-static constexpr lv_display_rotation_t DISPLAY_ROTATION = LV_DISPLAY_ROTATION_270;
+static constexpr lv_display_rotation_t DISPLAY_ROTATION = LV_DISPLAY_ROTATION_90;
 
 int main()
 {
@@ -62,7 +65,8 @@ int main()
 
     // --- Sample UI (ensures the display shows active content) ---
     lv_obj_t* label = lv_label_create(lv_screen_active());
-    lv_label_set_text(label, "Airgap Update Demo\nWaiting for USB...");
+    std::string labelText = std::string("Airgap Audit Kiosk\nDevice: ") + DEVICE_ID + "\nVersion: " + APP_VERSION;
+    lv_label_set_text(label, labelText.c_str());
     lv_obj_center(label);
 
     std::cout << "Application initialized, entering main event loop\n";

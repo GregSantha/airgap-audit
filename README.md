@@ -4,6 +4,9 @@
 
 Built for air-gapped embedded systems (e.g. DietPi on ARMv8) where the application is closed in a box, has no network access, and is updated via a physical USB pendrive upon boot.
 
+
+> 📖 **Security Walkthrough & Interview Guide:** See [docs/evolution.md](docs/evolution.md) for the step-by-step breakdown of vulnerabilities (CWEs), fixes, and hardware proofs.
+
 ---
 
 ## Development Setup with `uv`
