@@ -132,7 +132,13 @@ def get_current_security_epoch(epoch_file: Path = EPOCH_FILE) -> int:
 
 
 def apply_update(source: Path, target: Path = TARGET_BIN, state_file: Path = STATE_FILE) -> bool:
-    """Atomically install binary if SHA-256 differs from host state file (legacy/unauthenticated)."""
+    """Atomically install binary if SHA-256 differs from host state file (legacy/unauthenticated).
+
+    Note:
+        Retained as the initial Step 1 prototype for unauthenticated hash-based updates.
+        Production offline deployments MUST use `apply_signed_update` for Ed25519 signature
+        verification, anti-rollback protection, and security epoch enforcement.
+    """
     new_hash = get_file_sha256(source)
     if state_file.is_file() and state_file.read_text().strip() == new_hash:
         logger.info("Binary matches previously applied hash (%s...). Skipping.", new_hash[:10])

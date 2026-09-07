@@ -63,7 +63,7 @@ int main()
 
     // --- Sample UI (ensures the display shows active content) ---
     lv_obj_t* label = lv_label_create(lv_screen_active());
-    std::string labelText = std::string("Airgap Audit Kiosk\nDevice: ") + app_meta::DEVICE_ID + "\nVersion: " + app_meta::VERSION;
+    std::string labelText = std::string("Airgap Audit GUI\nDevice: ") + app_meta::DEVICE_ID + "\nVersion: " + app_meta::VERSION;
     lv_label_set_text(label, labelText.c_str());
     lv_obj_center(label);
 

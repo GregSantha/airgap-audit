@@ -29,12 +29,12 @@ To cross-compile the application for the ARM A53 target (ARM64 / DRM/KMS backend
                     libmodbus-dev:arm64
    ```
 
-1. **Initialize Git Submodules**:
+3. **Initialize Git Submodules**:
    ```bash
    git submodule update --init --recursive
    ```
 
-3. **Build Target Binaries**:
+4. **Build Target Binaries**:
    ```bash
    cmake --preset arm64-release
    cmake --build --preset arm64-release -j$(nproc)
