@@ -1,4 +1,4 @@
-# Embedded Security Evolution & Interview Guide
+# Embedded Security Evolution & Guide
 
 A progressive, step-by-step breakdown of how the `airgap-audit` system evolves from a naive, vulnerable offline update mechanism into an enterprise-hardened, cryptographically verified embedded platform.
 
@@ -18,7 +18,7 @@ We implemented an MVP companion update agent (`updater.py`) running inside syste
   └──> Defer update, continue boot                 └──> Atomic swap & update state
 ```
 
-### 2. The Vulnerability & Educational Takeaway
+### 2. The Vulnerability & Takeaway
 While the baseline handles hardware isolation and prevents reboot loops, it completely lacks authenticity verification—exhibiting **CWE-494 (Download/Update of Code Without Integrity Check)** and **CWE-353 (Missing Support for Integrity Check)**. Any person with physical access to the device can insert an unauthenticated USB drive containing a malicious ELF binary or a backdoor shell script named `lvgl_gui`. Because `ExecStartPre` executes with root privileges to manage mounts, the untrusted binary would immediately replace the kiosk application and run at system boot.
 
 ### 3. Hardware Execution Proof
@@ -33,10 +33,10 @@ Verified on real DietPi hardware during boot:
 
 ---
 
-## Step 2: Cryptographic Container & Hardware Binding (CWE-494 Remediation)
+## Step 2: Cryptographic Container & Security Epoch Versioning (CWE-494 / CWE-1328 Remediation)
 
 ### 1. What We Did & Architecture
-We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 140-byte cryptographic header encapsulates format metadata, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, its SHA-256 digest, and an asymmetric **Ed25519** signature covering the header fields. Crucially, the container implements an industry-standard **dual-versioning model**:
+We remediated CWE-494 by implementing a post-build signing tool and a sealed single-file container format (`<binary_name>.update`, magic `b"AGUP"`). The 140-byte cryptographic header encapsulates format metadata, a 20-byte target hardware device identifier (`"lvgl_gui"`), the payload's byte length, its SHA-256 digest, and an asymmetric **Ed25519** signature covering the header fields. Crucially, the container implements an industry-standard **Security Epoch (Anti-Rollback) Versioning Model**:
 * **App Version (Feature Version):** Identifies the user-space feature release. Moving between feature versions within the same security epoch (upgrading or rolling back during lab/QA validation) is permitted.
 * **Security Epoch (Anti-Rollback Index):** Monotonically enforced counter. Incremented *only* when a security vulnerability (CWE) is resolved. The updater rejects any candidate where `security_epoch < installed_epoch`.
 * **Single Source of Truth (`version.h`):** Defined cleanly in `lvgl_gui/version.h` (`VERSION`, `SECURITY_EPOCH`, `DEVICE_ID`). The Python packaging tool auto-detects this header and deterministically maps SemVer strings (`"0.1.0"` $\to$ `100`) to integer version codes without redundant manual flags.
@@ -51,8 +51,12 @@ We remediated CWE-494 by implementing a post-build signing tool and a sealed sin
             └── PASS: Check device ID & Security Epoch ──> Atomic unpack to /home/dietpi/lvgl_gui
 ```
 
-### 2. The Vulnerability Remediation & Interview Takeaway
-This step eliminates **CWE-494** (Unauthenticated Code Download) and **CWE-1328** (Downgrade / Rollback to Vulnerable Version). Without the private key, an adversary cannot forge valid containers. Furthermore, separating feature versions from the security epoch solves the real-world operational problem: engineers can freely rollback broken UI features in testing, but once a security vulnerability is closed (e.g. bumping from Epoch 1 to 2 in `v1.1.1`), an attacker can never re-flash the vulnerable `v1.1.0` binary onto field devices.
+### 2. The Vulnerability Remediation & Takeaway
+This step eliminates **CWE-494** (Unauthenticated Code Download) and **CWE-1328** (Downgrade / Rollback to Vulnerable Version). Without the private key, an adversary cannot forge valid containers.
+
+Furthermore, **Security Epoch Versioning** solves a critical operational friction in embedded engineering:
+* **Lab Testing vs. Vulnerability Fixes:** If release `1.1.0` (Epoch 1) has a UI bug during bench testing, engineers can immediately rollback to `1.0.0` (Epoch 1) via USB.
+* **Irreversible Vulnerability Remediation:** When a security flaw is identified in `1.1.0`, we release `1.1.1` with `Security Epoch = 2`. Because the anti-rollback rule enforces `candidate_epoch >= installed_epoch`, an attacker with physical USB access can never downgrade the device back to the vulnerable `1.1.0` or `1.0.0` build.
 
 ### 3. Verification & Tamper Resistance Proof
 Verified via automated test suite across 6 verification scenarios:
