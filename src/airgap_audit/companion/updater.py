@@ -1,8 +1,9 @@
 """
-Offline USB Application Update Agent (ARMv8 / DietPi).
+Offline USB update agent for embedded Linux (DietPi / ARMv8).
 
-Runs from systemd ExecStartPre to detect, verify (via Ed25519 digital signature,
-hardware binding, security epoch anti-rollback), and atomically apply binary updates from USB.
+Runs as systemd ExecStartPre to detect removable USB drives, verify Ed25519-signed
+.update containers, enforce anti-rollback via security epochs, and atomically
+replace the target binary.
 """
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] [updater] %(message)s",
     datefmt="%H:%M:%S",
+    stream=sys.stdout,
+    force=True,
 )
 logger = logging.getLogger("airgap_updater")
 
@@ -55,15 +58,18 @@ def get_file_sha256(path: Path) -> str:
 
 
 def find_usb_partitions() -> list[dict[str, Any]]:
-    """Discover removable USB partitions via lsblk, ignoring internal SD/system disks."""
+    """Scan removable USB partitions, ignoring internal system disks."""
     cmd = ["lsblk", "-J", "-o", "NAME,PATH,TRAN,RM,FSTYPE,MOUNTPOINTS,MOUNTPOINT"]
     try:
-        data = json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
-    except (subprocess.SubprocessError, json.JSONDecodeError):
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(proc.stdout)
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        logger.warning("lsblk command failed or returned invalid JSON: %s", exc)
         return []
 
     partitions = []
-    for disk in data.get("blockdevices", []):
+    block_devices = data.get("blockdevices", [])
+    for disk in block_devices:
         is_usb = disk.get("tran") == "usb"
         is_removable = disk.get("rm") in (True, 1, "1")
         if not (is_usb and is_removable):
@@ -81,7 +87,9 @@ def find_usb_partitions() -> list[dict[str, Any]]:
                 continue
 
             active_mount = next((m for m in mounts if m), None)
-            partitions.append({"device": p.get("path") or f"/dev/{p['name']}", "mount": active_mount})
+            dev_path = p.get("path") or f"/dev/{p['name']}"
+            partitions.append({"device": dev_path, "mount": active_mount})
+            logger.info("Detected removable USB partition: %s (fs=%s, mount=%s)", dev_path, fstype, active_mount)
 
     return partitions
 
@@ -125,7 +133,11 @@ def get_current_security_epoch(epoch_file: Path = EPOCH_FILE) -> int:
 
 
 def apply_update(source: Path, target: Path = TARGET_BIN, state_file: Path = STATE_FILE) -> bool:
-    """Atomically install binary if SHA-256 differs from host state file (legacy/unauthenticated)."""
+    """Atomically install binary if SHA-256 differs from host state file.
+
+    Step 1 prototype (unauthenticated, hash-only). Retained for reference;
+    production deployments use ``apply_signed_update`` (Ed25519 + anti-rollback).
+    """
     new_hash = get_file_sha256(source)
     if state_file.is_file() and state_file.read_text().strip() == new_hash:
         logger.info("Binary matches previously applied hash (%s...). Skipping.", new_hash[:10])
@@ -263,9 +275,18 @@ def run(
     public_key_path: Path = PUBLIC_KEY_PATH,
 ) -> bool:
     """Search plugged USB drives for signed package (<target>.update) and apply update."""
+    logger.info("=== AirGap Offline USB Companion Updater Check ===")
+    logger.info(
+        "Target: %s (installed version: %d, epoch: %d)",
+        target,
+        get_current_installed_version(version_file),
+        get_current_security_epoch(epoch_file),
+    )
+    logger.info("Public key: %s (exists=%s)", public_key_path, public_key_path.is_file())
+
     devices = find_usb_partitions()
     if not devices:
-        logger.info("No removable USB storage detected.")
+        logger.info("No removable USB storage detected on system.")
         return False
 
     update_pkg_name = f"{target.name}.update"
@@ -274,7 +295,13 @@ def run(
         try:
             with mount_usb_readonly(dev["device"], dev["mount"]) as mount_dir:
                 candidate = mount_dir / update_pkg_name
+                logger.info("Checking %s for '%s'...", dev["device"], update_pkg_name)
                 if candidate.is_file():
+                    logger.info(
+                        "Found update package: %s (%d bytes). Verifying signature...",
+                        candidate,
+                        candidate.stat().st_size,
+                    )
                     return apply_signed_update(
                         container_path=candidate,
                         public_key_path=public_key_path,
@@ -283,8 +310,19 @@ def run(
                         version_file=version_file,
                         epoch_file=epoch_file,
                     )
+                else:
+                    try:
+                        found_files = [f.name for f in mount_dir.iterdir() if not f.name.startswith(".")]
+                        logger.warning(
+                            "'%s' not found on %s. Root files on USB: %s",
+                            update_pkg_name,
+                            dev["device"],
+                            found_files[:10],
+                        )
+                    except OSError as read_err:
+                        logger.warning("Could not list directory contents of %s: %s", mount_dir, read_err)
         except subprocess.SubprocessError as err:
-            logger.error("Failed to read USB %s: %s", dev["device"], err)
+            logger.error("Failed to mount or read USB %s: %s", dev["device"], err)
 
     return False
 
@@ -294,7 +332,10 @@ def main() -> None:
     try:
         run()
     except Exception:
-        logger.exception("Unexpected error during update check")
+        logger.exception("Fatal error during USB update check")
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
     sys.exit(0)
 
 

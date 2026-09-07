@@ -7,6 +7,8 @@ Type=simple
 User=dietpi
 WorkingDirectory=/home/dietpi
 
+Environment=PYTHONUNBUFFERED=1
+
 # 1. Run USB companion updater
 #    '+' runs as root to allow mounting /dev/sda1
 #    '-' ensures systemd still launches existing binary if no USB is attached

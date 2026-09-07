@@ -19,7 +19,7 @@ We implemented an MVP companion update agent (`updater.py`) running inside syste
 ```
 
 ### 2. The Vulnerability & Takeaway
-While the baseline handles hardware isolation and prevents reboot loops, it completely lacks authenticity verification—exhibiting **CWE-494 (Download/Update of Code Without Integrity Check)** and **CWE-353 (Missing Support for Integrity Check)**. Any person with physical access to the device can insert an unauthenticated USB drive containing a malicious ELF binary or a backdoor shell script named `lvgl_gui`. Because `ExecStartPre` executes with root privileges to manage mounts, the untrusted binary would immediately replace the kiosk application and run at system boot.
+While the baseline handles hardware isolation and prevents reboot loops, it completely lacks authenticity verification—exhibiting **CWE-494 (Download/Update of Code Without Integrity Check)** and **CWE-353 (Missing Support for Integrity Check)**. Any person with physical access to the device can insert an unauthenticated USB drive containing a malicious ELF binary or a backdoor shell script named `lvgl_gui`. Because `ExecStartPre` executes with root privileges to manage mounts, the untrusted binary would immediately replace the GUI application and run at system boot.
 
 ### 3. Hardware Execution Proof
 Verified on real DietPi hardware during boot:
@@ -133,3 +133,21 @@ Stripped Symbols           INFO    CWE-200  Local symbol table (.symtab) retaine
 
 Hardening Score: 100% | Production Status: PASSED
 ```
+
+---
+
+## Future Roadmap & Follow-Up Plans
+
+### Step 4: Systemd Service Sandboxing & Least Privilege (CWE-250 / CWE-269)
+* **Objective:** Enforce kernel and systemd-level isolation around the user-space binary to limit the blast radius of any application-level zero-day.
+* **Planned Mitigations:**
+  * **Filesystem & Mount Hardening:** `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, and `ReadOnlyPaths=/`.
+  * **Privilege De-escalation:** `NoNewPrivileges=yes`, dropping capability sets via `CapabilityBoundingSet=`, and non-root execution.
+  * **System Call Filtering (seccomp):** `SystemCallFilter=@system-service` to restrict kernel attack surfaces.
+
+### Step 5: Runtime Integrity & Read-Only Root Filesystem (CWE-353 / CWE-284)
+* **Objective:** Provide tamper resistance against direct physical flash access (eMMC / SD card removal) and prevent persistent operating system poisoning.
+* **Planned Mitigations:**
+  * **dm-verity / Read-Only Rootfs:** Block-level cryptographic verification of system partitions using dm-verity or read-only `overlayfs`.
+  * **Hardware Root of Trust:** Measured boot chain binding bootloader stages to hardware cryptographic fuses / TPM.
+
