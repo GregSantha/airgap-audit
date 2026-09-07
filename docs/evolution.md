@@ -133,3 +133,21 @@ Stripped Symbols           INFO    CWE-200  Local symbol table (.symtab) retaine
 
 Hardening Score: 100% | Production Status: PASSED
 ```
+
+---
+
+## Future Roadmap & Follow-Up Plans
+
+### Step 4: Systemd Service Sandboxing & Least Privilege (CWE-250 / CWE-269)
+* **Objective:** Enforce kernel and systemd-level isolation around the user-space kiosk binary to limit the blast radius of any application-level zero-day.
+* **Planned Mitigations:**
+  * **Filesystem & Mount Hardening:** `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, and `ReadOnlyPaths=/`.
+  * **Privilege De-escalation:** `NoNewPrivileges=yes`, dropping capability sets via `CapabilityBoundingSet=`, and non-root execution.
+  * **System Call Filtering (seccomp):** `SystemCallFilter=@system-service` to restrict kernel attack surfaces.
+
+### Step 5: Runtime Integrity & Read-Only Root Filesystem (CWE-353 / CWE-284)
+* **Objective:** Provide tamper resistance against direct physical flash access (eMMC / SD card removal) and prevent persistent operating system poisoning.
+* **Planned Mitigations:**
+  * **dm-verity / Read-Only Rootfs:** Block-level cryptographic verification of system partitions using dm-verity or read-only `overlayfs`.
+  * **Hardware Root of Trust:** Measured boot chain binding bootloader stages to hardware cryptographic fuses / TPM.
+
