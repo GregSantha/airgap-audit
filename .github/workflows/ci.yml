@@ -123,10 +123,12 @@ jobs:
           name: python_dist
           path: ./python-dist
 
-      - name: Prepare Release Binary
+      - name: Stage Release Assets
         run: |
-          cp ./arm64-dist/lvgl_gui ./lvgl_gui
-          chmod +x ./lvgl_gui
+          mkdir -p ./release-assets
+          cp ./arm64-dist/lvgl_gui ./release-assets/lvgl_gui
+          chmod +x ./release-assets/lvgl_gui
+          cp ./python-dist/* ./release-assets/
 
       - name: Sign & Package Update Container (lvgl_gui.update)
         env:
@@ -143,19 +145,16 @@ jobs:
 
           # Auto-detects version, epoch, and device_id from lvgl_gui/version.h
           uv run airgap-audit package create \
-            --payload ./lvgl_gui \
+            --payload ./release-assets/lvgl_gui \
             --key /tmp/release_key.pem \
-            --out ./lvgl_gui.update
+            --out ./release-assets/lvgl_gui.update
 
           rm -f /tmp/release_key.pem
 
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            lvgl_gui
-            lvgl_gui.update
-            ./python-dist/*
+          files: ./release-assets/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
